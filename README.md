@@ -4,7 +4,7 @@
 Mettre en place un lab local avec **Vagrant** et **Ansible** comprenant :
 1. Une machine de contrôle (manager) où Ansible est installé.
 2. Deux machines cibles (node1 et node2) à configurer via Ansible.
-3. Configurer manuellement les clés SSH et les empreintes.
+3. Configurer automatiquement les clés SSH et les empreintes.
 
 ---
 
@@ -42,6 +42,15 @@ Mettre en place un lab local avec **Vagrant** et **Ansible** comprenant :
      # Utilisation de l'image Ubuntu 22.04
      config.vm.box = "ubuntu/jammy64"
 
+     # Génération de la clé SSH
+     config.vm.provision "shell", inline: <<-SHELL
+       if [ ! -f /home/vagrant/.ssh/id_rsa ]; then
+         ssh-keygen -t rsa -b 2048 -f /home/vagrant/.ssh/id_rsa -q -N ""
+         cat /home/vagrant/.ssh/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+         chmod 600 /home/vagrant/.ssh/authorized_keys
+       fi
+     SHELL
+
      # Manager (machine Ansible)
      config.vm.define "manager" do |manager|
        manager.vm.hostname = "manager"
@@ -64,6 +73,12 @@ Mettre en place un lab local avec **Vagrant** et **Ansible** comprenant :
          vb.memory = "512"
          vb.cpus = 1
        end
+       # Provision : copie la clé publique du manager
+       node1.vm.provision "shell", inline: <<-SHELL
+         mkdir -p /home/vagrant/.ssh
+         echo '$(cat /home/vagrant/.ssh/id_rsa.pub)' >> /home/vagrant/.ssh/authorized_keys
+         chmod 600 /home/vagrant/.ssh/authorized_keys
+       SHELL
      end
 
      # Node 2
@@ -74,6 +89,12 @@ Mettre en place un lab local avec **Vagrant** et **Ansible** comprenant :
          vb.memory = "512"
          vb.cpus = 1
        end
+       # Provision : copie la clé publique du manager
+       node2.vm.provision "shell", inline: <<-SHELL
+         mkdir -p /home/vagrant/.ssh
+         echo '$(cat /home/vagrant/.ssh/id_rsa.pub)' >> /home/vagrant/.ssh/authorized_keys
+         chmod 600 /home/vagrant/.ssh/authorized_keys
+       SHELL
      end
    end
    ```
@@ -87,59 +108,7 @@ Mettre en place un lab local avec **Vagrant** et **Ansible** comprenant :
 
 ---
 
-## Étape 3 : Configuration des clés SSH et empreintes
-
-### 1. Génération de la clé SSH sur le manager
-1. Connectez-vous à la machine **manager** :
-   ```bash
-   vagrant ssh manager
-   ```
-2. Générez une clé SSH :
-   ```bash
-   ssh-keygen -t rsa -b 2048
-   ```
-   - Appuyez sur **Entrée** pour toutes les options.
-   - La clé sera stockée dans `/home/vagrant/.ssh/id_rsa`.
-
-### 2. Copie manuelle des clés SSH
-1. Affichez la clé publique générée sur le **manager** :
-   ```bash
-   cat ~/.ssh/id_rsa.pub
-   ```
-
-2. Connectez-vous manuellement aux nodes pour copier la clé :
-   - **Node1** :
-     ```bash
-     ssh vagrant@192.168.x.x  # Remplacez par l'IP de node1
-     ```
-     (Mot de passe : `vagrant`)
-
-     Sur le **node1**, ajoutez la clé publique au fichier `~/.ssh/authorized_keys` :
-     ```bash
-     echo "VOTRE_CLÉ_PUBLIC" >> ~/.ssh/authorized_keys
-     ```
-     Définissez les bonnes permissions :
-     ```bash
-     chmod 700 ~/.ssh
-     chmod 600 ~/.ssh/authorized_keys
-     ```
-
-   - **Node2** :
-     Répétez la même procédure pour **node2**.
-
-### 3. Validation des empreintes SSH
-1. Depuis la machine **manager**, connectez-vous une première fois aux nodes pour approuver les empreintes :
-   - **Node1** :
-     ```bash
-     ssh vagrant@192.168.x.x  # Remplacez par l'IP de node1
-     ```
-     Tapez **yes** pour approuver l'empreinte.
-   - **Node2** :
-     Répétez pour **node2**.
-
----
-
-## Étape 4 : Configuration d'Ansible
+## Étape 3 : Configuration d'Ansible
 
 ### 1. Création du fichier `inventory.ini`
 1. Créez le fichier d’inventaire :
@@ -175,7 +144,7 @@ Mettre en place un lab local avec **Vagrant** et **Ansible** comprenant :
 
 ---
 
-## Étape 5 : Exemple d'un Playbook Ansible
+## Étape 4 : Exemple d'un Playbook Ansible
 
 ### 1. Création du Playbook
 1. Créez un fichier `playbook.yml` :
